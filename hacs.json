@@ -1,0 +1,6 @@
+{
+  "name": "VESC Express",
+  "render_readme": true,
+  "content_in_root": false,
+  "homeassistant": "2025.5.0"
+}

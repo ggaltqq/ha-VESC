@@ -1,0 +1,51 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to VESC Express",
+        "data": {
+          "host": "Host / IP address",
+          "port": "TCP port",
+          "controller_can_id": "Controller CAN ID",
+          "bms_can_id": "BMS CAN ID",
+          "poll_interval": "Poll interval (seconds)",
+          "cell_type": "Battery cell type"
+        },
+        "data_description": {
+          "cell_type": "Used to estimate State of Charge from cell voltage when the BMS reports 0%. Leave unset if unsure — you'll be prompted only if it's actually needed."
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "This VESC Express is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "controller_can_id": "Controller CAN ID",
+          "bms_can_id": "BMS CAN ID",
+          "poll_interval": "Poll interval (seconds)",
+          "cell_type": "Battery cell type"
+        }
+      }
+    }
+  },
+  "issues": {
+    "cell_type_missing": {
+      "title": "Select your battery cell type",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "title": "Select your battery cell type",
+            "description": "The BMS is reporting 0% State of Charge, but the pack's cell voltages look healthy — the BMS just isn't computing SoC. Pick your cell type and VESC Express will estimate SoC from the resting cell voltage instead.",
+            "data": {
+              "cell_type": "Battery cell type"
+            }
+          }
+        }
+      }
+    }
+  }
+}
