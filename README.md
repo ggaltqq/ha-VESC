@@ -6,6 +6,7 @@ the VESC binary protocol — no MQTT broker, no cloud, read-only.
 
 ## Contents
 
+- [Requirements](#requirements)
 - [Entities](#entities)
 - [Installation](#installation)
   - [Via HACS (custom repository)](#via-hacs-custom-repository--recommended)
@@ -13,6 +14,19 @@ the VESC binary protocol — no MQTT broker, no cloud, read-only.
 - [Setup](#setup)
 - [State of Charge estimation](#state-of-charge-estimation)
 - [Known limitations / things to verify against your firmware](#known-limitations--things-to-verify-against-your-firmware)
+
+## Requirements
+
+Before setting up the integration, your VESC Express must be configured correctly on your local network:
+
+*   **Wi-Fi Station Mode:** The VESC Express must be configured to connect to your existing home Wi-Fi network rather than working as an Access Point (AP). 
+    1. Connect to your board using **VESC Tool**.
+    2. Locate and select the VESC Express in the **CAN Devices** list.
+    3. Go to the **VESC Express** tab, then select the **WiFi** category.
+    4. Set **WiFi Mode** to **Station**.
+    5. Configure your local network credentials in the **Station mode SSID** and **Station Mode Key** fields.
+    6. Write the configuration to the device.
+*   **Static IP Address:** Configure your home network router to assign a **static DHCP lease / reserved IP address** to the VESC Express. Because Home Assistant communicates with the board directly over TCP using its IP address, a changing dynamic IP will break the integration whenever the board reconnects.
 
 ## Entities
 
