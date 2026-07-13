@@ -21,6 +21,7 @@ STATIC_REFRESH_EVERY_POLLS = 30
 # enum and have not changed across firmware generations:
 COMM_FW_VERSION = 0
 COMM_GET_VALUES = 4
+COMM_GET_VALUES_SETUP = 47  # includes the persistent odometer (meters)
 COMM_FORWARD_CAN = 34
 
 # CAN ping + BMS telemetry opcodes. Confirmed against real VESC Express

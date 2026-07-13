@@ -168,6 +168,7 @@ class VescCoordinator(DataUpdateCoordinator):
             "bms": None,
             "soc_percent": None,
             "soc_estimated": False,
+            "odometer_m": None,
         }
 
         await self._refresh_can_nodes()
@@ -178,6 +179,15 @@ class VescCoordinator(DataUpdateCoordinator):
         except (VescProtocolError, OSError, TimeoutError) as err:
             _LOGGER.debug("Controller unreachable this cycle: %s", err)
             return data  # no point trying BMS if the controller itself is down
+
+        # Persistent odometer (survives reboots). Best-effort -- a failed read
+        # just leaves the previous value in place, it never fails the poll.
+        try:
+            data["odometer_m"] = await self._client.get_odometer(
+                self._controller_can_id
+            )
+        except (VescProtocolError, OSError, TimeoutError) as err:
+            _LOGGER.debug("Odometer read failed this cycle: %s", err)
 
         try:
             data["bms"] = await self._client.get_bms_values()

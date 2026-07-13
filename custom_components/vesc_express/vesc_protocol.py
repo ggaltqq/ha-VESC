@@ -24,6 +24,7 @@ from .const import (
     COMM_FORWARD_CAN,
     COMM_FW_VERSION,
     COMM_GET_VALUES,
+    COMM_GET_VALUES_SETUP,
     COMM_PING_CAN,
     DEFAULT_RETRIES,
     DEFAULT_TIMEOUT,
@@ -213,9 +214,19 @@ class BmsValues:
     # estimate -- see soc.py and the coordinator.
     soc_percent: float
     pack_voltage: float
-    pack_current: float
+    charge_voltage: float  # charger-target voltage; ~pack V when a charger is on, else 0
+    pack_current: float  # best-available current (i_in, or i_in_ic when i_in is unpopulated)
+    current_main: float  # i_in  (main shunt; 0 on BMSes that don't populate it)
+    current_ic: float  # i_in_ic (measured by the BMS IC)
     charging: bool
     cells: list[float]  # per-cell voltages, for the SoC estimate fallback
+
+
+# A charger is considered present when the reported charge-target voltage is a
+# meaningful fraction of the pack voltage (scales with any pack size). On BMSes
+# that don't populate i_in, current sign alone can't tell charging from idle --
+# charge_voltage is the reliable signal.
+_CHARGE_DETECT_FRACTION = 0.5
 
 
 def parse_bms_values(payload: bytes) -> BmsValues:
@@ -230,9 +241,9 @@ def parse_bms_values(payload: bytes) -> BmsValues:
 
     try:
         (pack_voltage_raw,) = take(">i")  # / 1e6
-        take(">i")  # charge_voltage
-        (current_raw,) = take(">i")  # / 1e6
-        take(">i")  # current_ic
+        (charge_voltage_raw,) = take(">i")  # / 1e6
+        (current_main_raw,) = take(">i")  # i_in, / 1e6
+        (current_ic_raw,) = take(">i")  # i_in_ic, / 1e6
         take(">i")  # amp_hours
         take(">i")  # watt_hours
         (cell_num,) = take(">B")
@@ -251,15 +262,35 @@ def parse_bms_values(payload: bytes) -> BmsValues:
         ) from exc
 
     pack_voltage = pack_voltage_raw / 1e6
-    pack_current = current_raw / 1e6
+    charge_voltage = charge_voltage_raw / 1e6
+    current_main = current_main_raw / 1e6
+    current_ic = current_ic_raw / 1e6
+    # Prefer the main-shunt current; fall back to the IC current when the BMS
+    # doesn't populate i_in (it reads a flat 0 on some ENNOID configs).
+    pack_current = current_main if abs(current_main) > 0.01 else current_ic
     return BmsValues(
         soc_percent=max(0.0, min(100.0, (soc_raw / 1e3) * 100)),
         pack_voltage=pack_voltage,
+        charge_voltage=charge_voltage,
         pack_current=pack_current,
+        current_main=current_main,
+        current_ic=current_ic,
         cells=[c / 1e3 for c in cell_raw],
-        # VESC BMS current is positive on discharge, negative on charge.
-        charging=pack_current < 0,
+        charging=charge_voltage > pack_voltage * _CHARGE_DETECT_FRACTION,
     )
+
+
+def parse_odometer(payload: bytes) -> int:
+    """Odometer (meters) from a COMM_GET_VALUES_SETUP reply.
+
+    Parsed from the end: the reply finishes with ...[odometer u32][uptime u32].
+    """
+    body = payload[1:]  # drop the echoed opcode
+    if len(body) < 8:
+        raise VescProtocolError(
+            f"COMM_GET_VALUES_SETUP payload too short for odometer: {len(body)} bytes"
+        )
+    return int.from_bytes(body[-8:-4], "big", signed=False)
 
 
 class VescClient:
@@ -321,6 +352,21 @@ class VescClient:
             encode_forward_can(controller_can_id, COMM_GET_VALUES)
         )
         return parse_controller_values(payload)
+
+    async def get_odometer(self, controller_can_id: int) -> int:
+        """Return the controller's persistent odometer in meters.
+
+        Read from COMM_GET_VALUES_SETUP (forwarded to the controller). Unlike
+        the tachometer, this value is stored on the board and survives reboots
+        (it's the "life" distance shown in VESC Tool). The odometer is the
+        second-to-last uint32 in the reply (followed by an uptime uint32), so
+        we parse from the end -- robust to leading-field changes across
+        firmware versions.
+        """
+        payload = await self._request(
+            encode_forward_can(controller_can_id, COMM_GET_VALUES_SETUP)
+        )
+        return parse_odometer(payload)
 
     async def get_can_nodes(self) -> list[int]:
         """Return CAN node IDs seen on the bus (best-effort; see COMM_PING_CAN note in const.py)."""

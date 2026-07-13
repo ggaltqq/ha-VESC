@@ -8,6 +8,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import UnitOfLength
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -23,6 +24,7 @@ async def async_setup_entry(
         [
             VescControllerSensor(coordinator, entry),
             VescBmsSensor(coordinator, entry),
+            VescOdometerSensor(coordinator, entry),
         ]
     )
 
@@ -67,7 +69,7 @@ class VescControllerSensor(CoordinatorEntity, SensorEntity):
         c = self.coordinator.data.get("controller")
         if c is None:
             return {}
-        return {
+        attrs = {
             "duty_cycle": c.duty_now,
             "rpm": c.rpm,
             "input_voltage": c.v_in,
@@ -83,6 +85,7 @@ class VescControllerSensor(CoordinatorEntity, SensorEntity):
             "tachometer_abs": c.tachometer_abs,
             "fault_code": c.fault_code,
         }
+        return attrs
 
 
 class VescBmsSensor(CoordinatorEntity, SensorEntity):
@@ -125,7 +128,10 @@ class VescBmsSensor(CoordinatorEntity, SensorEntity):
         attrs = {
             "charging": bms.charging,
             "pack_voltage": bms.pack_voltage,
+            "charge_voltage": bms.charge_voltage,
             "pack_current": bms.pack_current,
+            "current_main": bms.current_main,
+            "current_ic": bms.current_ic,
             # True when the value is a voltage estimate, not a BMS reading.
             "soc_estimated": self.coordinator.data.get("soc_estimated", False),
             "bms_reported_soc": bms.soc_percent,
@@ -135,3 +141,35 @@ class VescBmsSensor(CoordinatorEntity, SensorEntity):
             attrs["min_cell_voltage"] = round(min(bms.cells), 3)
             attrs["max_cell_voltage"] = round(max(bms.cells), 3)
         return attrs
+
+
+class VescOdometerSensor(CoordinatorEntity, SensorEntity):
+    """Persistent lifetime distance (the "life" odometer stored on the board).
+
+    Always meters on the wire regardless of the VESC km/miles display setting
+    (that setting is client-side only); exposed here in km. Uses
+    TOTAL_INCREASING so Home Assistant's long-term statistics accumulate
+    correctly -- the value is board-persisted and monotonic, surviving reboots.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Odometer"
+    _attr_icon = "mdi:counter"
+    _attr_device_class = SensorDeviceClass.DISTANCE
+    _attr_native_unit_of_measurement = UnitOfLength.KILOMETERS
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_suggested_display_precision = 1
+
+    def __init__(self, coordinator, entry: ConfigEntry) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry.entry_id}_odometer"
+        self._attr_device_info = _device_info(entry)
+
+    @property
+    def available(self) -> bool:
+        return bool(self.coordinator.data.get("controller_connected"))
+
+    @property
+    def native_value(self):
+        meters = self.coordinator.data.get("odometer_m")
+        return round(meters / 1000, 3) if meters is not None else None

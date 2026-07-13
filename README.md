@@ -16,7 +16,7 @@ the VESC binary protocol — no MQTT broker, no cloud, read-only.
 
 ## Entities
 
-Two entities are created per configured board:
+Three entities are created per configured board:
 
 - **`sensor.<name>_controller`** — state is the literal string `connected`
   or `disconnected`, reflecting whether the board answered this poll cycle.
@@ -30,8 +30,24 @@ Two entities are created per configured board:
   - `unknown` — the controller answered, but the BMS-specific read failed
     (worth investigating — check `bms_can_id` and CAN wiring)
   - a number — everything's fine
-  Extra attributes: `charging` (bool, board-reported), pack voltage, pack
-  current.
+  Extra attributes: `charging`, `pack_voltage`, `charge_voltage`,
+  `pack_current`, `current_main`, `current_ic`, `soc_estimated`,
+  `bms_reported_soc`, cell count and min/max cell voltage.
+
+  `charging` is derived from the BMS charge-target voltage (`charge_voltage`
+  rises to ~pack voltage when a charger is connected, drops to 0 otherwise) —
+  more reliable than current sign. `pack_current` reports the main-shunt
+  current (`current_main`), or falls back to the BMS-IC current (`current_ic`)
+  when the shunt value is unpopulated (0 on some ENNOID configs); negative
+  means charging, positive means discharging.
+
+- **`sensor.<name>_odometer`** — lifetime distance (km), the persistent "life"
+  odometer stored on the controller (the same value VESC Tool shows). It
+  survives board reboots and never resets. Uses the `total_increasing` state
+  class so Home Assistant's long-term statistics track it correctly. The value
+  is always meters on the wire regardless of the VESC km/miles display setting
+  (that setting is client-side only); it's converted to km here, and Home
+  Assistant will display miles automatically if your HA unit system is imperial.
 
 ## Installation
 
